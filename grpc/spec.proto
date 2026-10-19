@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option go_package = "./grpc";
+
+package grpc;
+
+
+// The chat service definition.
+service ChatService {
+  // Sends a chat message
+  rpc Chat(stream Payload) returns (stream Payload) {}
+}
+
+message Payload {
+  // The message to be sent.
+  string message = 1;
+
+  // The Lamport timestamp of the message.
+  int32 lamport = 2;
+
+  // The username of the sender.
+  string username = 3;
+}
