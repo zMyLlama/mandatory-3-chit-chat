@@ -70,8 +70,8 @@ func (h *Chat) init() {
 		select {
 		case request := <-h.register:
 			h.clients[request.client] = struct{}{}
-			log.Printf("client connected")
-			h.broadcastSystemMessage(request.client.username + " joined the chat")
+			log.Printf("[SERVER] A client with id %s connected (%s)", request.client.username, time.Now().Format(time.RFC3339))
+			h.broadcastSystemMessage("Participant " + request.client.username + " joined the chat at logical time [TODO]")
 			close(request.ready)
 		case request := <-h.unregister:
 			if h.removeClient(request.client) {
@@ -129,8 +129,8 @@ func (h *Chat) enqueueMessage(message *pb.Payload) bool {
 }
 
 func (h *Chat) broadcastSystemMessage(text string) {
-	message := &pb.Payload{Username: "SERVER", Message: text}
-	log.Printf("system message broadcast")
+	message := &pb.Payload{Username: "[SERVER]", Message: text}
+	log.Printf("[SERVER] System message broadcast (%s)", time.Now().Format(time.RFC3339))
 	h.processBroadcast(message)
 }
 
@@ -147,7 +147,7 @@ func (h *Chat) removeClient(client *chatClient) bool {
 	delete(h.clients, client)
 	close(client.done)
 	close(client.outbound)
-	log.Printf("client disconnected")
+	log.Printf("[SERVER] A client with id %s disconnected (%s)", client.username, time.Now().Format(time.RFC3339))
 	return true
 }
 
@@ -168,6 +168,14 @@ func (s *server) Chat(stream pb.ChatService_ChatServer) error {
 		outbound: make(chan *pb.Payload, outboundQueueSize),
 		done:     make(chan struct{}),
 	}
+
+	payload := &pb.Payload{
+		Username: client.username,
+		Message:  "",
+		Flag:     1, // 1 = join
+	}
+	stream.Send(payload)
+
 	if !s.chat.registerClient(stream.Context(), client) {
 		return nil
 	}
@@ -264,6 +272,7 @@ func (s *server) sendMessages(stream pb.ChatService_ChatServer, client *chatClie
 func main() {
 	listener, err := net.Listen("tcp", serverAddress)
 	if err != nil {
+		log.Fatalf("[SERVER] Failed to listen on %s: %v", serverAddress, err)
 		log.Fatal(err)
 	}
 
@@ -278,9 +287,10 @@ func main() {
 
 	go grpcServer.Serve(listener)
 
-	log.Printf("server started address=%s", listener.Addr())
+	log.Printf("[SERVER] Started on %s (%s)", listener.Addr(), time.Now().Format(time.RFC3339))
 	<-signals.Done()
-	log.Printf("server shutdown requested")
+	// Log always includes a timestamp
+	log.Printf("[SERVER] Shutdown requested... (%s)", time.Now().Format(time.RFC3339))
 
 	stopped := make(chan struct{})
 	go func() {
@@ -290,12 +300,12 @@ func main() {
 	select {
 	case <-stopped:
 	case <-time.After(5 * time.Second):
-		log.Printf("graceful shutdown timed out; stopping active streams")
+		log.Printf("[SERVER] Graceful shutdown timed out; stopping active streams (%s)", time.Now().Format(time.RFC3339))
 		grpcServer.Stop()
 		<-stopped
 	}
 
 	chat.shutdown()
 	<-chat.done
-	log.Printf("server stopped")
+	log.Printf("[SERVER] Successfully stopped (%s)", time.Now().Format(time.RFC3339))
 }

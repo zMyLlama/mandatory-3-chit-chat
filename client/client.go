@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	pb "mandatory-3-chit-chat/grpc"
@@ -23,7 +24,7 @@ const maxMessageLength = 128
 func main() {
 	conn, err := grpc.NewClient(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("[CLIENT] Failed to connect: %v", err)
+		log.Fatalf("[CLIENT] Failed to connect: %v (%s)", err, time.Now().Format(time.RFC3339))
 	}
 	defer conn.Close()
 
@@ -32,19 +33,34 @@ func main() {
 	client := pb.NewChatServiceClient(conn)
 	stream, err := client.Chat(baseCtx)
 	if err != nil {
-		log.Fatalf("[CLIENT] Failed to start chat: %v", err)
+		log.Fatalf("[CLIENT] Failed to start chat: %v (%s)", err, time.Now().Format(time.RFC3339))
 	}
-	log.Printf("[CLIENT] Connected to %s. Type messages and press Enter; Ctrl-D to leave.", serverAddress)
+	log.Printf("[CLIENT] Connected to %s.\nType any messages and press Enter; Ctrl-D (or Ctrl-C) to leave.\nMax %d characters per message.", serverAddress, maxMessageLength)
 
 	receiveDone := make(chan error, 1)
 	go func() {
+		var whois string
+
 		for {
 			message, err := stream.Recv()
 			if err != nil {
 				receiveDone <- err
 				return
 			}
-			fmt.Printf("\r%s: %s\n", message.GetUsername(), message.GetMessage())
+
+			if message.GetFlag() == 1 {
+				fmt.Printf("\nWelcome! You are %s\n", message.GetUsername())
+				if whois == "" {
+					whois = message.GetUsername()
+				}
+			} else if message.GetFlag() == 0 {
+				displayUsername := message.GetUsername()
+				if displayUsername == whois {
+					displayUsername = "You"
+				}
+
+				fmt.Printf("\r%s: %s\n", displayUsername, message.GetMessage())
+			}
 		}
 	}()
 
@@ -54,9 +70,14 @@ func main() {
 	inputDone := make(chan error, 1)
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
+
 		for scanner.Scan() {
+			line := scanner.Text()
+
+			// This funny thing clears the last line of the terminal
+			fmt.Print("\033[1A\033[2K\r")
 			select {
-			case inputLines <- scanner.Text():
+			case inputLines <- line:
 			case <-inputCtx.Done():
 				return
 			}
@@ -72,17 +93,17 @@ func main() {
 		case line, ok := <-inputLines:
 			if !ok {
 				if err := <-inputDone; err != nil {
-					log.Printf("[CLIENT] Failed to read input: %v", err)
+					log.Printf("[CLIENT] Failed to read input: %v (%s)", err, time.Now().Format(time.RFC3339))
 				}
 				sending = false
 				continue
 			}
 			if !utf8.ValidString(line) {
-				log.Printf("[CLIENT] Message not sent: input must be valid UTF-8")
+				log.Printf("[CLIENT] Invalid message: input must be valid UTF-8 (%s)", time.Now().Format(time.RFC3339))
 				continue
 			}
 			if length := utf8.RuneCountInString(line); length > maxMessageLength {
-				log.Printf("[CLIENT] Message not sent: got %d characters, maximum is %d", length, maxMessageLength)
+				log.Printf("[CLIENT] Invalid message: got %d characters, maximum is %d characters (%s)", length, maxMessageLength, time.Now().Format(time.RFC3339))
 				continue
 			}
 			text := strings.TrimSpace(line)
@@ -90,12 +111,12 @@ func main() {
 				continue
 			}
 			if err := stream.Send(&pb.Payload{Message: text}); err != nil {
-				log.Printf("[CLIENT] Failed to send message: %v", err)
+				log.Printf("[CLIENT] Failed to send message: %v (%s)", err, time.Now().Format(time.RFC3339))
 				sending = false
 			}
 		case err := <-receiveDone:
 			if err != io.EOF {
-				log.Printf("[CLIENT] Receive ended: %v", err)
+				log.Printf("[CLIENT] Receive ended: %v (%s)", err, time.Now().Format(time.RFC3339))
 			}
 			receiveEnded = true
 			cancelInput()
@@ -104,17 +125,17 @@ func main() {
 	}
 
 	if err := stream.CloseSend(); err != nil {
-		log.Printf("[CLIENT] Failed to close send side: %v", err)
+		log.Printf("[CLIENT] Failed to close send side: %v (%s)", err, time.Now().Format(time.RFC3339))
 	}
 
 	if !receiveEnded {
 		select {
 		case err := <-receiveDone:
 			if err != nil && err != io.EOF {
-				log.Printf("[CLIENT] Receive ended: %v", err)
+				log.Printf("[CLIENT] Receive ended: %v (%s)", err, time.Now().Format(time.RFC3339))
 			}
 		case <-baseCtx.Done():
 		}
 	}
-	log.Printf("[CLIENT] Disconnected")
+	log.Printf("[CLIENT] Disconnected (%s)", time.Now().Format(time.RFC3339))
 }

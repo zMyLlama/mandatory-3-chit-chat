@@ -28,7 +28,9 @@ type Payload struct {
 	// The Lamport timestamp of the message.
 	Lamport int32 `protobuf:"varint,2,opt,name=lamport,proto3" json:"lamport,omitempty"`
 	// The username of the sender.
-	Username      string `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	Username string `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	// flag (0 = normal message, 1 = join)
+	Flag          int32 `protobuf:"varint,4,opt,name=flag,proto3" json:"flag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -84,20 +86,25 @@ func (x *Payload) GetUsername() string {
 	return ""
 }
 
+func (x *Payload) GetFlag() int32 {
+	if x != nil {
+		return x.Flag
+	}
+	return 0
+}
+
 var File_grpc_spec_proto protoreflect.FileDescriptor
 
 const file_grpc_spec_proto_rawDesc = "" +
 	"\n" +
-	"\x0fgrpc/spec.proto\x12\x04grpc\"Y\n" +
+	"\x0fgrpc/spec.proto\x12\x04grpc\"m\n" +
 	"\aPayload\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x18\n" +
 	"\alamport\x18\x02 \x01(\x05R\alamport\x12\x1a\n" +
-	"\busername\x18\x03 \x01(\tR\busername2\x9a\x01\n" +
+	"\busername\x18\x03 \x01(\tR\busername\x12\x12\n" +
+	"\x04flag\x18\x04 \x01(\x05R\x04flag29\n" +
 	"\vChatService\x12*\n" +
-	"\x04Chat\x12\r.grpc.Payload\x1a\r.grpc.Payload\"\x00(\x010\x01\x12-\n" +
-	"\aConnect\x12\r.grpc.Payload\x1a\r.grpc.Payload\"\x00(\x010\x01\x120\n" +
-	"\n" +
-	"Disconnect\x12\r.grpc.Payload\x1a\r.grpc.Payload\"\x00(\x010\x01B\bZ\x06./grpcb\x06proto3"
+	"\x04Chat\x12\r.grpc.Payload\x1a\r.grpc.Payload\"\x00(\x010\x01B\bZ\x06./grpcb\x06proto3"
 
 var (
 	file_grpc_spec_proto_rawDescOnce sync.Once
@@ -117,13 +124,9 @@ var file_grpc_spec_proto_goTypes = []any{
 }
 var file_grpc_spec_proto_depIdxs = []int32{
 	0, // 0: grpc.ChatService.Chat:input_type -> grpc.Payload
-	0, // 1: grpc.ChatService.Connect:input_type -> grpc.Payload
-	0, // 2: grpc.ChatService.Disconnect:input_type -> grpc.Payload
-	0, // 3: grpc.ChatService.Chat:output_type -> grpc.Payload
-	0, // 4: grpc.ChatService.Connect:output_type -> grpc.Payload
-	0, // 5: grpc.ChatService.Disconnect:output_type -> grpc.Payload
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
+	0, // 1: grpc.ChatService.Chat:output_type -> grpc.Payload
+	1, // [1:2] is the sub-list for method output_type
+	0, // [0:1] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name

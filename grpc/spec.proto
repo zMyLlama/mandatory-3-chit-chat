@@ -20,4 +20,7 @@ message Payload {
 
   // The username of the sender.
   string username = 3;
+
+  // flag (0 = normal message, 1 = join)
+  int32 flag = 4;
 }
