@@ -24,7 +24,7 @@ const maxMessageLength = 128
 func main() {
 	conn, err := grpc.NewClient(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("[CLIENT] Failed to connect: %v (%s)", err, time.Now().Format(time.RFC3339))
+		log.Fatalf("[CLIENT] Failed to connect: %v", err)
 	}
 	defer conn.Close()
 
@@ -33,11 +33,14 @@ func main() {
 	client := pb.NewChatServiceClient(conn)
 	stream, err := client.Chat(baseCtx)
 	if err != nil {
-		log.Fatalf("[CLIENT] Failed to start chat: %v (%s)", err, time.Now().Format(time.RFC3339))
+		log.Fatalf("[CLIENT] Failed to start chat: %v", err)
 	}
 	log.Printf("[CLIENT] Connected to %s.\nType any messages and press Enter; Ctrl-D (or Ctrl-C) to leave.\nMax %d characters per message.", serverAddress, maxMessageLength)
 
 	receiveDone := make(chan error, 1)
+	lamportClock := make(chan int64, 1)
+	lamportClock <- 0
+
 	go func() {
 		var whois string
 
@@ -48,8 +51,12 @@ func main() {
 				return
 			}
 
+			receivedLamport := message.GetLamport()
+			lamportClock <- max(<-lamportClock, receivedLamport) + 1
+
 			if message.GetFlag() == 1 {
-				fmt.Printf("\nWelcome! You are %s\n", message.GetUsername())
+				log.Printf("[CLIENT] Server confirmed join and assigned username %s (L: %d)", message.GetUsername(), receivedLamport)
+				fmt.Printf("\nWelcome! You are %s (L: %d, %s)\n", message.GetUsername(), receivedLamport, time.Now().Format(time.RFC3339))
 				if whois == "" {
 					whois = message.GetUsername()
 				}
@@ -59,7 +66,8 @@ func main() {
 					displayUsername = "You"
 				}
 
-				fmt.Printf("\r%s: %s\n", displayUsername, message.GetMessage())
+				log.Printf("[CLIENT] Received message from %s: %s (L: %d)", message.GetUsername(), message.GetMessage(), receivedLamport)
+				fmt.Printf("\r%s: %s (L: %d, %s)\n", displayUsername, message.GetMessage(), receivedLamport, time.Now().Format(time.RFC3339))
 			}
 		}
 	}()
@@ -93,17 +101,17 @@ func main() {
 		case line, ok := <-inputLines:
 			if !ok {
 				if err := <-inputDone; err != nil {
-					log.Printf("[CLIENT] Failed to read input: %v (%s)", err, time.Now().Format(time.RFC3339))
+					log.Printf("[CLIENT] Failed to read input: %v", err)
 				}
 				sending = false
 				continue
 			}
 			if !utf8.ValidString(line) {
-				log.Printf("[CLIENT] Invalid message: input must be valid UTF-8 (%s)", time.Now().Format(time.RFC3339))
+				log.Printf("[CLIENT] Invalid message: input must be valid UTF-8")
 				continue
 			}
 			if length := utf8.RuneCountInString(line); length > maxMessageLength {
-				log.Printf("[CLIENT] Invalid message: got %d characters, maximum is %d characters (%s)", length, maxMessageLength, time.Now().Format(time.RFC3339))
+				log.Printf("[CLIENT] Invalid message: got %d characters, maximum is %d characters", length, maxMessageLength)
 				continue
 			}
 			text := strings.TrimSpace(line)
@@ -111,12 +119,12 @@ func main() {
 				continue
 			}
 			if err := stream.Send(&pb.Payload{Message: text}); err != nil {
-				log.Printf("[CLIENT] Failed to send message: %v (%s)", err, time.Now().Format(time.RFC3339))
+				log.Printf("[CLIENT] Failed to send message: %v", err)
 				sending = false
 			}
 		case err := <-receiveDone:
 			if err != io.EOF {
-				log.Printf("[CLIENT] Receive ended: %v (%s)", err, time.Now().Format(time.RFC3339))
+				log.Printf("[CLIENT] Receive ended: %v", err)
 			}
 			receiveEnded = true
 			cancelInput()
@@ -125,17 +133,17 @@ func main() {
 	}
 
 	if err := stream.CloseSend(); err != nil {
-		log.Printf("[CLIENT] Failed to close send side: %v (%s)", err, time.Now().Format(time.RFC3339))
+		log.Printf("[CLIENT] Failed to close send side: %v", err)
 	}
 
 	if !receiveEnded {
 		select {
 		case err := <-receiveDone:
 			if err != nil && err != io.EOF {
-				log.Printf("[CLIENT] Receive ended: %v (%s)", err, time.Now().Format(time.RFC3339))
+				log.Printf("[CLIENT] Receive ended: %v", err)
 			}
 		case <-baseCtx.Done():
 		}
 	}
-	log.Printf("[CLIENT] Disconnected (%s)", time.Now().Format(time.RFC3339))
+	log.Printf("[CLIENT] Disconnected")
 }

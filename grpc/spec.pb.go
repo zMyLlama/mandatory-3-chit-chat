@@ -26,7 +26,7 @@ type Payload struct {
 	// The message to be sent.
 	Message string `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	// The Lamport timestamp of the message.
-	Lamport int32 `protobuf:"varint,2,opt,name=lamport,proto3" json:"lamport,omitempty"`
+	Lamport int64 `protobuf:"varint,2,opt,name=lamport,proto3" json:"lamport,omitempty"`
 	// The username of the sender.
 	Username string `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
 	// flag (0 = normal message, 1 = join)
@@ -72,7 +72,7 @@ func (x *Payload) GetMessage() string {
 	return ""
 }
 
-func (x *Payload) GetLamport() int32 {
+func (x *Payload) GetLamport() int64 {
 	if x != nil {
 		return x.Lamport
 	}
@@ -100,7 +100,7 @@ const file_grpc_spec_proto_rawDesc = "" +
 	"\x0fgrpc/spec.proto\x12\x04grpc\"m\n" +
 	"\aPayload\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x18\n" +
-	"\alamport\x18\x02 \x01(\x05R\alamport\x12\x1a\n" +
+	"\alamport\x18\x02 \x01(\x03R\alamport\x12\x1a\n" +
 	"\busername\x18\x03 \x01(\tR\busername\x12\x12\n" +
 	"\x04flag\x18\x04 \x01(\x05R\x04flag29\n" +
 	"\vChatService\x12*\n" +

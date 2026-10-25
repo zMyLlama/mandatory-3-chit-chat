@@ -70,7 +70,7 @@ func (h *Chat) init() {
 		select {
 		case request := <-h.register:
 			h.clients[request.client] = struct{}{}
-			log.Printf("[SERVER] A client with id %s connected (%s)", request.client.username, time.Now().Format(time.RFC3339))
+			log.Printf("[SERVER] A client with id %s connected", request.client.username)
 			h.broadcastSystemMessage("Participant " + request.client.username + " joined the chat at logical time [TODO]")
 			close(request.ready)
 		case request := <-h.unregister:
@@ -130,7 +130,7 @@ func (h *Chat) enqueueMessage(message *pb.Payload) bool {
 
 func (h *Chat) broadcastSystemMessage(text string) {
 	message := &pb.Payload{Username: "[SERVER]", Message: text}
-	log.Printf("[SERVER] System message broadcast (%s)", time.Now().Format(time.RFC3339))
+	log.Printf("[SERVER] System message broadcast")
 	h.processBroadcast(message)
 }
 
@@ -147,7 +147,7 @@ func (h *Chat) removeClient(client *chatClient) bool {
 	delete(h.clients, client)
 	close(client.done)
 	close(client.outbound)
-	log.Printf("[SERVER] A client with id %s disconnected (%s)", client.username, time.Now().Format(time.RFC3339))
+	log.Printf("[SERVER] A client with id %s disconnected", client.username)
 	return true
 }
 
@@ -287,10 +287,10 @@ func main() {
 
 	go grpcServer.Serve(listener)
 
-	log.Printf("[SERVER] Started on %s (%s)", listener.Addr(), time.Now().Format(time.RFC3339))
+	log.Printf("[SERVER] Started on %s", listener.Addr())
 	<-signals.Done()
 	// Log always includes a timestamp
-	log.Printf("[SERVER] Shutdown requested... (%s)", time.Now().Format(time.RFC3339))
+	log.Printf("[SERVER] Shutdown requested...")
 
 	stopped := make(chan struct{})
 	go func() {
@@ -300,12 +300,12 @@ func main() {
 	select {
 	case <-stopped:
 	case <-time.After(5 * time.Second):
-		log.Printf("[SERVER] Graceful shutdown timed out; stopping active streams (%s)", time.Now().Format(time.RFC3339))
+		log.Printf("[SERVER] Graceful shutdown timed out; stopping active streams")
 		grpcServer.Stop()
 		<-stopped
 	}
 
 	chat.shutdown()
 	<-chat.done
-	log.Printf("[SERVER] Successfully stopped (%s)", time.Now().Format(time.RFC3339))
+	log.Printf("[SERVER] Successfully stopped")
 }
