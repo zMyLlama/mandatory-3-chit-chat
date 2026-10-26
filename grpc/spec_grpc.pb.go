@@ -19,9 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChatService_Chat_FullMethodName       = "/grpc.ChatService/Chat"
-	ChatService_Connect_FullMethodName    = "/grpc.ChatService/Connect"
-	ChatService_Disconnect_FullMethodName = "/grpc.ChatService/Disconnect"
+	ChatService_Chat_FullMethodName = "/grpc.ChatService/Chat"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -32,8 +30,6 @@ const (
 type ChatServiceClient interface {
 	// Sends a chat message
 	Chat(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[Payload, Payload], error)
-	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[Payload, Payload], error)
-	Disconnect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[Payload, Payload], error)
 }
 
 type chatServiceClient struct {
@@ -57,32 +53,6 @@ func (c *chatServiceClient) Chat(ctx context.Context, opts ...grpc.CallOption) (
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ChatService_ChatClient = grpc.BidiStreamingClient[Payload, Payload]
 
-func (c *chatServiceClient) Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[Payload, Payload], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[1], ChatService_Connect_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[Payload, Payload]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ChatService_ConnectClient = grpc.BidiStreamingClient[Payload, Payload]
-
-func (c *chatServiceClient) Disconnect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[Payload, Payload], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[2], ChatService_Disconnect_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[Payload, Payload]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ChatService_DisconnectClient = grpc.BidiStreamingClient[Payload, Payload]
-
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility.
@@ -91,8 +61,6 @@ type ChatService_DisconnectClient = grpc.BidiStreamingClient[Payload, Payload]
 type ChatServiceServer interface {
 	// Sends a chat message
 	Chat(grpc.BidiStreamingServer[Payload, Payload]) error
-	Connect(grpc.BidiStreamingServer[Payload, Payload]) error
-	Disconnect(grpc.BidiStreamingServer[Payload, Payload]) error
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -105,12 +73,6 @@ type UnimplementedChatServiceServer struct{}
 
 func (UnimplementedChatServiceServer) Chat(grpc.BidiStreamingServer[Payload, Payload]) error {
 	return status.Error(codes.Unimplemented, "method Chat not implemented")
-}
-func (UnimplementedChatServiceServer) Connect(grpc.BidiStreamingServer[Payload, Payload]) error {
-	return status.Error(codes.Unimplemented, "method Connect not implemented")
-}
-func (UnimplementedChatServiceServer) Disconnect(grpc.BidiStreamingServer[Payload, Payload]) error {
-	return status.Error(codes.Unimplemented, "method Disconnect not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 func (UnimplementedChatServiceServer) testEmbeddedByValue()                     {}
@@ -140,20 +102,6 @@ func _ChatService_Chat_Handler(srv interface{}, stream grpc.ServerStream) error 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ChatService_ChatServer = grpc.BidiStreamingServer[Payload, Payload]
 
-func _ChatService_Connect_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ChatServiceServer).Connect(&grpc.GenericServerStream[Payload, Payload]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ChatService_ConnectServer = grpc.BidiStreamingServer[Payload, Payload]
-
-func _ChatService_Disconnect_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ChatServiceServer).Disconnect(&grpc.GenericServerStream[Payload, Payload]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ChatService_DisconnectServer = grpc.BidiStreamingServer[Payload, Payload]
-
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -165,18 +113,6 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Chat",
 			Handler:       _ChatService_Chat_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
-		{
-			StreamName:    "Connect",
-			Handler:       _ChatService_Connect_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
-		{
-			StreamName:    "Disconnect",
-			Handler:       _ChatService_Disconnect_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

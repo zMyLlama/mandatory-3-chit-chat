@@ -16,8 +16,11 @@ message Payload {
   string message = 1;
 
   // The Lamport timestamp of the message.
-  int32 lamport = 2;
+  int64 lamport = 2;
 
   // The username of the sender.
   string username = 3;
+
+  // A flag (0 = normal message, 1 = join)
+  int32 flag = 4;
 }

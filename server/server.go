@@ -42,23 +42,25 @@ type unregistration struct {
 }
 
 type Chat struct {
-	register   chan registration
-	unregister chan unregistration
-	broadcast  chan *pb.Payload
-	stop       chan struct{}
-	done       chan struct{}
-	stopOnce   sync.Once
-	clients    map[*chatClient]struct{}
+	register     chan registration
+	unregister   chan unregistration
+	broadcast    chan *pb.Payload
+	stop         chan struct{}
+	done         chan struct{}
+	stopOnce     sync.Once
+	clients      map[*chatClient]struct{}
+	lamportClock chan int64
 }
 
 func newChat() *Chat {
 	return &Chat{
-		register:   make(chan registration),
-		unregister: make(chan unregistration),
-		broadcast:  make(chan *pb.Payload, broadcastQueueSize),
-		stop:       make(chan struct{}),
-		done:       make(chan struct{}),
-		clients:    make(map[*chatClient]struct{}),
+		register:     make(chan registration),
+		unregister:   make(chan unregistration),
+		broadcast:    make(chan *pb.Payload, broadcastQueueSize),
+		stop:         make(chan struct{}),
+		done:         make(chan struct{}),
+		clients:      make(map[*chatClient]struct{}),
+		lamportClock: make(chan int64, 1),
 	}
 }
 
@@ -66,19 +68,34 @@ func newChat() *Chat {
 func (h *Chat) init() {
 	defer close(h.done)
 
+	h.lamportClock <- 0
+
 	for {
 		select {
 		case request := <-h.register:
 			h.clients[request.client] = struct{}{}
-			log.Printf("client connected")
-			h.broadcastSystemMessage(request.client.username + " joined the chat")
+
+			currentLamport := <-h.lamportClock
+			newLamport := currentLamport + 1
+			h.lamportClock <- newLamport
+
+			log.Printf("[SERVER] A client with id %s connected (L @ %d)", request.client.username, newLamport)
+			h.broadcastSystemMessage("Participant "+request.client.username+" joined the chat at logical time "+fmt.Sprintf("%d", newLamport), newLamport)
 			close(request.ready)
 		case request := <-h.unregister:
-			if h.removeClient(request.client) {
-				h.broadcastSystemMessage(request.client.username + " left the chat")
+			result := h.removeClient(request.client)
+			if result.success {
+				h.broadcastSystemMessage("Participant "+request.client.username+" left the chat at logical time "+fmt.Sprintf("%d", result.newLamport), result.newLamport)
 			}
 			close(request.ready)
 		case message := <-h.broadcast:
+			currentLamport := <-h.lamportClock
+			newLamport := currentLamport + 1
+			h.lamportClock <- newLamport
+
+			log.Printf("[SERVER] Broadcasting message from %s with content %s and lamport %d", message.GetUsername(), message.GetMessage(), newLamport)
+
+			message.Lamport = newLamport
 			h.processBroadcast(message)
 		case <-h.stop:
 			for client := range h.clients {
@@ -128,9 +145,9 @@ func (h *Chat) enqueueMessage(message *pb.Payload) bool {
 	}
 }
 
-func (h *Chat) broadcastSystemMessage(text string) {
-	message := &pb.Payload{Username: "SERVER", Message: text}
-	log.Printf("system message broadcast")
+func (h *Chat) broadcastSystemMessage(text string, lamport int64) {
+	message := &pb.Payload{Username: "Server", Message: text, Lamport: lamport}
+	log.Printf("[SERVER] System message broadcast with lamport timestamp %d: %s", lamport, text)
 	h.processBroadcast(message)
 }
 
@@ -140,15 +157,25 @@ func (h *Chat) processBroadcast(message *pb.Payload) {
 	}
 }
 
-func (h *Chat) removeClient(client *chatClient) bool {
+type removeResult struct {
+	success    bool
+	newLamport int64
+}
+
+func (h *Chat) removeClient(client *chatClient) removeResult {
 	if _, exists := h.clients[client]; !exists {
-		return false
+		return removeResult{success: false, newLamport: 0}
 	}
 	delete(h.clients, client)
 	close(client.done)
 	close(client.outbound)
-	log.Printf("client disconnected")
-	return true
+
+	currentLamport := <-h.lamportClock
+	newLamport := currentLamport + 1
+	h.lamportClock <- newLamport
+
+	log.Printf("[SERVER] A client with id %s disconnected (L @ %d)", client.username, newLamport)
+	return removeResult{success: true, newLamport: newLamport}
 }
 
 func (h *Chat) shutdown() {
@@ -168,6 +195,14 @@ func (s *server) Chat(stream pb.ChatService_ChatServer) error {
 		outbound: make(chan *pb.Payload, outboundQueueSize),
 		done:     make(chan struct{}),
 	}
+
+	payload := &pb.Payload{
+		Username: client.username,
+		Message:  "",
+		Flag:     1, // 1 = join
+	}
+	stream.Send(payload)
+
 	if !s.chat.registerClient(stream.Context(), client) {
 		return nil
 	}
@@ -187,6 +222,9 @@ func (s *server) Chat(stream pb.ChatService_ChatServer) error {
 	go func() {
 		for {
 			message, err := stream.Recv()
+
+			log.Printf("[SERVER] Received message from %s: %s (L @ %d)", client.username, message.GetMessage(), message.GetLamport())
+
 			select {
 			case received <- receiveResult{message: message, err: err}:
 			case <-stream.Context().Done():
@@ -212,9 +250,14 @@ func (s *server) Chat(stream pb.ChatService_ChatServer) error {
 				continue
 			}
 
+			receivedLamport := result.message.GetLamport()
+			newLamport := max(<-s.chat.lamportClock, receivedLamport) + 1
+			s.chat.lamportClock <- newLamport
+
 			message := &pb.Payload{
 				Username: client.username,
 				Message:  result.message.GetMessage(),
+				Lamport:  newLamport,
 			}
 
 			if message.Message == "" {
@@ -254,6 +297,7 @@ func (s *server) sendMessages(stream pb.ChatService_ChatServer, client *chatClie
 			if !ok {
 				return
 			}
+
 			if stream.Send(message) != nil {
 				return
 			}
@@ -264,6 +308,7 @@ func (s *server) sendMessages(stream pb.ChatService_ChatServer, client *chatClie
 func main() {
 	listener, err := net.Listen("tcp", serverAddress)
 	if err != nil {
+		log.Fatalf("[SERVER] Failed to listen on %s: %v", serverAddress, err)
 		log.Fatal(err)
 	}
 
@@ -278,9 +323,10 @@ func main() {
 
 	go grpcServer.Serve(listener)
 
-	log.Printf("server started address=%s", listener.Addr())
+	log.Printf("[SERVER] Started on %s", listener.Addr())
 	<-signals.Done()
-	log.Printf("server shutdown requested")
+	// Log always includes a timestamp
+	log.Printf("[SERVER] Shutdown requested...")
 
 	stopped := make(chan struct{})
 	go func() {
@@ -290,12 +336,12 @@ func main() {
 	select {
 	case <-stopped:
 	case <-time.After(5 * time.Second):
-		log.Printf("graceful shutdown timed out; stopping active streams")
+		log.Printf("[SERVER] Graceful shutdown timed out; stopping active streams")
 		grpcServer.Stop()
 		<-stopped
 	}
 
 	chat.shutdown()
 	<-chat.done
-	log.Printf("server stopped")
+	log.Printf("[SERVER] Successfully stopped")
 }
