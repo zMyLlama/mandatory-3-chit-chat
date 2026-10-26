@@ -37,7 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to start chat: %v", err)
 	}
-	log.Printf("Connected to %s.\nType any messages and press Enter; Ctrl-D (or Ctrl-C) to leave.\nMax %d characters per message.", serverAddress, maxMessageLength)
+	fmt.Printf("Connected to %s.\nType any messages and press Enter; Ctrl-D (or Ctrl-C) to leave.\nMax %d characters per message.", serverAddress, maxMessageLength)
 
 	receiveDone := make(chan error, 1)
 	lamportClock := make(chan int64, 1)
